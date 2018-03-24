@@ -2,7 +2,11 @@
 #include <iostream>
 #include "json.hpp"
 #include "PID.h"
+
 #include <math.h>
+#include <numeric>
+#include <vector>
+
 
 // for convenience
 using json = nlohmann::json;
@@ -33,9 +37,45 @@ int main()
   uWS::Hub h;
 
   PID pid;
-  // TODO: Initialize the pid variable.
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  // Initialize the pid variable.
+  // Just init with values from Lesson 17.
+  std::vector<double> param({0.107141, -1.18156e-05, 0.268861});
+  std::vector<double> last_param(param);
+
+  std::vector<double> delta_param({0.1, 0.1, 0.1});
+  std::vector<int> twiddle_direction({0, 0, 0});
+
+  pid.Init(param[0], param[1], param[2]);
+
+  // Initialize the max error
+  // If this error is exceeded, the simulator is reseted
+  double max_error = 2.0;
+
+  // Twiddle?
+  bool twiddle_mode = true;
+  int twiddle_index = 0;
+
+  // Init best error
+  double best_error = -1.0;
+  double twid_tolerance = 0.05;
+
+  // Define the number of frames to use for twiddling
+  unsigned long twiddle_steps = 4096;
+  unsigned long current_step = 0;
+
+  h.onMessage([&pid, // pass everything needed by reference into lambda function
+               &max_error,
+               &best_error,
+               &twiddle_mode,
+               &twiddle_index,
+               &twiddle_direction,
+               &twiddle_steps,
+               &twid_tolerance,
+               &current_step,
+               &param,
+               &last_param,
+               &delta_param](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -46,27 +86,133 @@ int main()
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
+
           // j[1] is the data JSON object
           double cte = std::stod(j[1]["cte"].get<std::string>());
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
-          double steer_value;
+
           /*
-          * TODO: Calcuate steering value here, remember the steering value is
+          * Calcuate steering value here, remember the steering value is
           * [-1, 1].
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
-          
-          // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          // Increment current step
+          if(twiddle_mode)
+            current_step++;
 
+          // Update errors in PID-Controller
+          pid.UpdateError(cte);
+
+          // Get updated steering value
+          double steer_value = pid.GetUpdatedSteering();
+          
+          // Get the last error
+          double last_error = pid.GetLastError();
+          // std::cout << "Last Error : " << pid.GetLastError() << std::endl;
+
+          // Create the JSON message for simulator
           json msgJson;
-          msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
-          auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
-          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          // std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          bool reset_simulator = twiddle_mode && (current_step > twiddle_steps);
+          if(twiddle_mode) {
+
+            // Check if twiddle is DONE?
+            double sum_of_deltas = static_cast<double>(std::accumulate(delta_param.begin(), delta_param.end(), 0.0));
+            if(sum_of_deltas < twid_tolerance) {
+              // Twiddle is done!
+              std::cout << "Twiddle finished! Params:" << std::endl;
+              for(const auto& p : param)
+                std::cout << p << std::endl;
+
+              exit(0);
+            }
+          }
+
+          // Reset simulator if error is too large
+          if((fabs(last_error) > max_error) || reset_simulator) {
+
+            if(twiddle_mode && (current_step > 10)) {
+              // This iteration has an average error of:
+              double avg_err = fabs(pid.TotalError() / static_cast<double>(current_step));
+              if(best_error < 0)
+                best_error = avg_err;
+
+              bool new_record = false;
+              bool new_param = false;
+
+              std::cout << "This Twiddle-run had abs-avg-error: " << avg_err << " best_error: "<< best_error << std::endl;
+              std::cout << "The run had : " << current_step << " steps." << std::endl;
+              std::cout << "Params:" << std::endl;
+              for(const auto& p : param)
+                std::cout << p << " ";
+
+              std::cout << std::endl;
+
+              if(twiddle_direction[twiddle_index] == 0) {
+                // Twiddle has tried to tune the parameter in the negative direction
+                if(avg_err < best_error) {
+                  best_error = avg_err;
+                  // Since we found a new optimum, we reset the delta to 0.1
+                  delta_param[twiddle_index] = 0.1;
+                  last_param[twiddle_index] = param[twiddle_index];
+                  new_record = true;
+                  new_param = true;
+                } else {
+                  // Update Params for twiddle
+                  param[twiddle_index] = last_param[twiddle_index];
+                  param[twiddle_index] += delta_param[twiddle_index];
+                  twiddle_direction[twiddle_index] = 1;
+                }
+              }
+              else {
+                // Twiddle has tried to tune the parameter in the positive direction
+                if(avg_err < best_error) {
+                  best_error = avg_err;
+                  // Since we found a new optimum, we reset the delta to 0.1
+                  delta_param[twiddle_index] = 0.1;
+                  last_param[twiddle_index] = param[twiddle_index];
+                  new_record = true;
+                  new_param = true;
+                } else {
+                  // Update Params for twiddle
+                  param[twiddle_index] = last_param[twiddle_index];
+                  param[twiddle_index] -= delta_param[twiddle_index];
+                  twiddle_direction[twiddle_index] = 0;
+                }
+              }
+
+              if(!new_record) {
+                delta_param[twiddle_index] *= 0.9;
+              }
+
+              if(new_param) {
+                twiddle_index += 1;
+                twiddle_index = twiddle_index % static_cast<int>(param.size());
+              }
+            }
+
+            // Reset Steps
+            current_step = 0;
+
+            // Reset PID-controller
+            pid.Init(param[0], param[1], param[2]);
+
+            // Send Reset command to simulator!
+            // Found by looking in :
+            // https://github.com/udacity/self-driving-car-sim/blob/a796708484d7411296f9bab51f764327d6cd24da/Assets/1_SelfDrivingCar/Scripts/project_4/CommandServer_pid.cs
+            std::string msg = "42[\"reset\",{}]";
+            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          }
+          else {
+
+            msgJson["steering_angle"] = steer_value;
+            msgJson["throttle"] = 0.5;
+            auto msg = "42[\"steer\"," + msgJson.dump() + "]";
+            //std::cout << msg << std::endl;
+            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          }
         }
       } else {
         // Manual driving
