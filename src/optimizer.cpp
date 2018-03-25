@@ -12,16 +12,17 @@
 Optimizer::Optimizer(const std::vector<double> &params, const std::vector<double> &params_deltas) :
   params(params),
   params_deltas(params_deltas),
+  best_param(params),
   base_delta_values(params_deltas),
   base_param_values(params)
 {
-  decrease_factor = 0.5;
-  decrease_min = 1e-3;
+  decrease_factor = 0.75;
+  decrease_min = 1e-4;
 
   current_parameter_id = 0;
   current_parameter_tune_direction = 1;
 
-  last_error = -1.0;
+  best_error = 0.0;
 }
 
 const std::vector<double>& Optimizer::GetParams() const {
@@ -46,17 +47,20 @@ void Optimizer::NextParameter() {
   return;
 }
 
-void Optimizer::UpdateLastError(const double& current_error) {
-  // Update last error
-  last_error = current_error;
+void Optimizer::UpdateBestError(const double& current_error) {
+  // Update best error
+  best_error = current_error;
+
+  // Update best parameter
+  best_param = params;
 }
 
 
 void Optimizer::OptimizeParameter(const double& current_error) {
   // Check if we are initialized
-  if(last_error < 0) {
+  if(best_error < 0) {
     // Update last error and return
-    last_error = current_error;
+    best_error = current_error;
     return;
   }
 
@@ -71,9 +75,12 @@ void Optimizer::OptimizeParameter(const double& current_error) {
 
 
   // Check if we improved
-  bool improved = (current_error < last_error);
+  bool improved = (current_error > best_error);
 
   if(improved) {
+
+    UpdateBestError(current_error);
+
     // The base value of the current parameter is the parameter itself now.
     base_value = param;
 
@@ -81,7 +88,7 @@ void Optimizer::OptimizeParameter(const double& current_error) {
     double direction = current_parameter_tune_direction == 1 ? 1.0 : -1.0;
 
     // Update the parameter again
-    param *= direction * delta;
+    param += direction * delta;
 
   } else {
     // OK, so we did not improve!
@@ -110,7 +117,13 @@ void Optimizer::OptimizeParameter(const double& current_error) {
     double direction = current_parameter_tune_direction == 1 ? 1.0 : -1.0;
 
     // Update the parameter !
-    param = param * direction * delta;
+    param += direction * delta;
+
+    // Finally check, if the parameter is negative
+    if(param < 0.0) {
+      param = 0.0;
+      NextParameter();
+    }
   }
 
   return;
@@ -121,7 +134,11 @@ void Optimizer::Print() {
   std::string direction = current_parameter_tune_direction == 1 ? "+1" : "-1";
 
   std::cout << "Optimizer working on parameter [" << current_parameter_id << "] in direction ["<< direction << "]" << std::endl;
-  std::cout << "Last error was " << last_error << std::endl;
+  std::cout << "Best error was " << best_error << " with parameter: ";
+  for(const auto& p : best_param) {
+      std::cout << "[" << p << "] ";
+    }
+  std::cout << std::endl;
   std::cout << "Current parameter set: ";
   for(const auto& p : params) {
     std::cout << "[" << p << "] ";
@@ -140,10 +157,7 @@ void Optimizer::OptimizeOnRun(PID& pid_controller, long driven_steps) {
   double current_error = pid_controller.TotalError() / static_cast<double>(driven_steps);
 
   // Optimize on the currently targetted parameter
-  OptimizeParameter(current_error);
-
-  // Dont forget to update the last error
-  UpdateLastError(current_error);
+  OptimizeParameter(driven_steps);
 
   // Print Debug
   Print();

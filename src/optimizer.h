@@ -16,7 +16,7 @@ class Optimizer {
  private:
 
   // Parameter
-  std::vector<double> params, params_deltas, base_delta_values, base_param_values;
+  std::vector<double> params, best_param, params_deltas, base_delta_values, base_param_values;
 
   // Adjustment parameters
   double decrease_factor;
@@ -26,8 +26,8 @@ class Optimizer {
   int current_parameter_id;
   int current_parameter_tune_direction;
 
-  // The last error value
-  double last_error;
+  // The best error value
+  double best_error;
 
   /*
    * Does an optimization step on the current parameter.
@@ -39,7 +39,7 @@ class Optimizer {
    * */
   void NextParameter();
 
-  void UpdateLastError(const double& current_error);
+  void UpdateBestError(const double& current_error);
 
   void Print();
 

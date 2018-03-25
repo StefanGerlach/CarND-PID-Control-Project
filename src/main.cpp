@@ -40,8 +40,8 @@ int main()
   PID pid;
 
   // Initialize the pid variable.
-  std::vector<double> param({0.0, 0.0, 0.0});
-  std::vector<double> delta_param({1.0, 1.0, 1.0});
+  std::vector<double> param({0.2, 0.0, 2.0});
+  std::vector<double> delta_param({3.0, 0.5, 3.0});
 
   pid.Init(param);
 
@@ -50,11 +50,11 @@ int main()
 
   // Initialize the max error
   // If this error is exceeded, the simulator is restarted
-  double max_error = 2.0;
+  double max_error = 3.0;
 
   // Define the number of frames to use for twiddling
   bool twiddle_mode = true;
-  unsigned long twiddle_steps = 4096;
+  unsigned long twiddle_steps = 65536;
   unsigned long current_step = 0;
 
   h.onMessage([&pid, // pass everything needed by reference into lambda function
@@ -90,12 +90,15 @@ int main()
           if(twiddle_mode)
             current_step++;
 
-          // Update errors in PID-Controller
-          pid.UpdateError(cte);
-
           // Get updated steering value
-          double steer_value = pid.GetUpdatedSteering();
-          
+          double steer_value = pid.GetUpdatedSteering(cte);
+
+          if(steer_value < -1.0)
+            steer_value = -1.0;
+
+          if(steer_value > 1.0)
+            steer_value = 1.0;
+
           // Get the last error
           double last_error = pid.GetLastError();
           // std::cout << "Last Error : " << pid.GetLastError() << std::endl;
@@ -103,7 +106,7 @@ int main()
           // Create the JSON message for simulator
           json msgJson;
 
-          // std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          //std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
           bool reset_simulator = twiddle_mode && ((current_step > twiddle_steps) || (fabs(last_error) > max_error));
 
           // Reset simulator if error is too large and twiddle mode is active
@@ -128,7 +131,7 @@ int main()
           else {
 
             msgJson["steering_angle"] = steer_value;
-            msgJson["throttle"] = 0.5;
+            msgJson["throttle"] = 0.3;
             auto msg = "42[\"steer\"," + msgJson.dump() + "]";
             //std::cout << msg << std::endl;
             ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);

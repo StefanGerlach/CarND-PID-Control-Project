@@ -62,7 +62,10 @@ double PID::GetLastError() const {
   return -1.0;
 }
 
-double PID::GetUpdatedSteering() {
+double PID::GetUpdatedSteering(const double& cte) {
+
+  // Update errors in PID-Controller
+  UpdateError(cte);
 
   if(last_errors.size() < 2) {
     std::cout << "Could not retrieve last error!" << std::endl;
@@ -80,7 +83,7 @@ double PID::TotalError() {
   double accumulated_abs_error = 0.0;
   for(const auto& e : last_errors)
 
-    accumulated_abs_error += fabs(e);
+    accumulated_abs_error += e;
   return accumulated_abs_error;
 }
 

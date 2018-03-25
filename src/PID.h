@@ -16,7 +16,6 @@ public:
   double Kp;
   double Ki;
   double Kd;
-
   /*
   * Constructor
   */
@@ -45,7 +44,7 @@ public:
   /*
    * Computes the current steering with respect to current steering and the cross track error.
    * */
-  double GetUpdatedSteering();
+  double GetUpdatedSteering(const double& cte);
 
   /*
    * Returns the last error
