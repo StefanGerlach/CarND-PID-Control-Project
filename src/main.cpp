@@ -40,10 +40,13 @@ int main()
 
   // Initialize the pid variable.
   // Just init with values from Lesson 17.
-  std::vector<double> param({0.107141, -1.18156e-05, 0.268861});
+  std::vector<double> param({0.2, 3.0, 0.004});
   std::vector<double> last_param(param);
 
-  std::vector<double> delta_param({0.1, 0.1, 0.1});
+
+  std::vector<double> delta_param({0.4, 6.0, 0.016});
+  std::vector<double> delta_param_default(delta_param);
+
   std::vector<int> twiddle_direction({0, 0, 0});
 
   pid.Init(param[0], param[1], param[2]);
@@ -75,7 +78,8 @@ int main()
                &current_step,
                &param,
                &last_param,
-               &delta_param](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+               &delta_param,
+               &delta_param_default](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -142,20 +146,23 @@ int main()
               bool new_record = false;
               bool new_param = false;
 
-              std::cout << "This Twiddle-run had abs-avg-error: " << avg_err << " best_error: "<< best_error << std::endl;
-              std::cout << "The run had : " << current_step << " steps." << std::endl;
-              std::cout << "Params:" << std::endl;
+              std::cout << "Stats of Run: abs avg error: [" << avg_err << "] best_error: ["<< best_error << "] steps: [" << current_step <<"]"  << std::endl;
+              std::cout << "Params: ";
+
               for(const auto& p : param)
                 std::cout << p << " ";
-
               std::cout << std::endl;
+
+              std::cout << "Delta: ";
+              for(const auto& p : delta_param)
+                std::cout << p << " ";
 
               if(twiddle_direction[twiddle_index] == 0) {
                 // Twiddle has tried to tune the parameter in the negative direction
                 if(avg_err < best_error) {
                   best_error = avg_err;
-                  // Since we found a new optimum, we reset the delta to 0.1
-                  delta_param[twiddle_index] = 0.1;
+                  // Since we found a new optimum, we reset the delta to default
+                  delta_param[twiddle_index] = delta_param_default[twiddle_index];
                   last_param[twiddle_index] = param[twiddle_index];
                   new_record = true;
                   new_param = true;
@@ -163,6 +170,10 @@ int main()
                   // Update Params for twiddle
                   param[twiddle_index] = last_param[twiddle_index];
                   param[twiddle_index] += delta_param[twiddle_index];
+                  if(delta_param[twiddle_index] < 1e-3) {
+                    delta_param[twiddle_index] = delta_param_default[twiddle_index];
+                    new_param = true;
+                  }
                   twiddle_direction[twiddle_index] = 1;
                 }
               }
@@ -171,7 +182,7 @@ int main()
                 if(avg_err < best_error) {
                   best_error = avg_err;
                   // Since we found a new optimum, we reset the delta to 0.1
-                  delta_param[twiddle_index] = 0.1;
+                  delta_param[twiddle_index] = 1.0;
                   last_param[twiddle_index] = param[twiddle_index];
                   new_record = true;
                   new_param = true;
@@ -179,15 +190,21 @@ int main()
                   // Update Params for twiddle
                   param[twiddle_index] = last_param[twiddle_index];
                   param[twiddle_index] -= delta_param[twiddle_index];
+                  if(delta_param[twiddle_index] < 1e-3) {
+                    delta_param[twiddle_index] = 1.0;
+                    new_param = true;
+                  }
                   twiddle_direction[twiddle_index] = 0;
                 }
               }
 
               if(!new_record) {
-                delta_param[twiddle_index] *= 0.9;
+                delta_param[twiddle_index] *= 0.5;
               }
 
               if(new_param) {
+                twiddle_direction[twiddle_index] -= -1;
+                twiddle_direction[twiddle_index] = abs(twiddle_direction[twiddle_index]);
                 twiddle_index += 1;
                 twiddle_index = twiddle_index % static_cast<int>(param.size());
               }

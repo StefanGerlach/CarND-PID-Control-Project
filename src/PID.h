@@ -31,12 +31,12 @@ public:
   * Initialize PID.
   */
   void Init(double Kp, double Ki, double Kd, int length_error_memory = 4096);
-
+  void Init(const std::vector<double>& params, int length_error_memory = 4096);
   /*
    * Updates the PID parameters Tau_p, Tau_d and Tau_i
    * */
   void SetParams(const double& Kp, const double& Ki, const double& Kd);
-
+  void SetParams(const std::vector<double>& params);
   /*
   * Update the PID error variables given cross track error.
   */

@@ -20,10 +20,33 @@ void PID::Init(double Kp, double Ki, double Kd, int length_error_memory) {
   this->last_errors = std::vector<double>(length_error_memory, 0.0);
 }
 
+void PID::Init(const std::vector<double>& params, int length_error_memory) {
+
+  if(params.size() != 3){
+     std::cout << "Illegal parameter vector given in SetParams! " << std::endl;
+     return;
+   }
+  this->Kp = params[0];
+  this->Ki = params[1];
+  this->Kd = params[2];
+  this->last_errors = std::vector<double>(length_error_memory, 0.0);
+}
+
 void PID::SetParams(const double& Kp, const double& Ki, const double& Kd) {
   this->Kp = Kp;
   this->Ki = Ki;
   this->Kd = Kd;
+}
+
+void PID::SetParams(const std::vector<double>& params) {
+
+  if(params.size() != 3){
+    std::cout << "Illegal parameter vector given in SetParams! " << std::endl;
+    return;
+  }
+  this->Kp = params[0];
+  this->Ki = params[1];
+  this->Kd = params[2];
 }
 
 void PID::UpdateError(double cte) {
