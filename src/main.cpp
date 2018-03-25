@@ -2,6 +2,7 @@
 #include <iostream>
 #include "json.hpp"
 #include "PID.h"
+#include "optimizer.h"
 
 #include <math.h>
 #include <numeric>
@@ -39,47 +40,31 @@ int main()
   PID pid;
 
   // Initialize the pid variable.
-  // Just init with values from Lesson 17.
-  std::vector<double> param({0.2, 3.0, 0.004});
-  std::vector<double> last_param(param);
+  std::vector<double> param({0.0, 0.0, 0.0});
+  std::vector<double> delta_param({1.0, 1.0, 1.0});
 
+  pid.Init(param);
 
-  std::vector<double> delta_param({0.4, 6.0, 0.016});
-  std::vector<double> delta_param_default(delta_param);
-
-  std::vector<int> twiddle_direction({0, 0, 0});
-
-  pid.Init(param[0], param[1], param[2]);
+  // Initialize the optimizer
+  Optimizer optimizer(param, delta_param);
 
   // Initialize the max error
-  // If this error is exceeded, the simulator is reseted
+  // If this error is exceeded, the simulator is restarted
   double max_error = 2.0;
 
-  // Twiddle?
-  bool twiddle_mode = true;
-  int twiddle_index = 0;
-
-  // Init best error
-  double best_error = -1.0;
-  double twid_tolerance = 0.05;
-
   // Define the number of frames to use for twiddling
+  bool twiddle_mode = true;
   unsigned long twiddle_steps = 4096;
   unsigned long current_step = 0;
 
   h.onMessage([&pid, // pass everything needed by reference into lambda function
+               &optimizer,
                &max_error,
-               &best_error,
                &twiddle_mode,
-               &twiddle_index,
-               &twiddle_direction,
                &twiddle_steps,
-               &twid_tolerance,
                &current_step,
                &param,
-               &last_param,
-               &delta_param,
-               &delta_param_default](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+               &delta_param](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -95,7 +80,6 @@ int main()
           double cte = std::stod(j[1]["cte"].get<std::string>());
           double speed = std::stod(j[1]["speed"].get<std::string>());
           double angle = std::stod(j[1]["steering_angle"].get<std::string>());
-
           /*
           * Calcuate steering value here, remember the steering value is
           * [-1, 1].
@@ -118,103 +102,22 @@ int main()
 
           // Create the JSON message for simulator
           json msgJson;
+
           // std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
-          bool reset_simulator = twiddle_mode && (current_step > twiddle_steps);
-          if(twiddle_mode) {
+          bool reset_simulator = twiddle_mode && ((current_step > twiddle_steps) || (fabs(last_error) > max_error));
 
-            // Check if twiddle is DONE?
-            double sum_of_deltas = static_cast<double>(std::accumulate(delta_param.begin(), delta_param.end(), 0.0));
-            if(sum_of_deltas < twid_tolerance) {
-              // Twiddle is done!
-              std::cout << "Twiddle finished! Params:" << std::endl;
-              for(const auto& p : param)
-                std::cout << p << std::endl;
+          // Reset simulator if error is too large and twiddle mode is active
+          if(reset_simulator) {
 
-              exit(0);
-            }
-          }
+            // After restart, there is a glitch-frame, that we skip
+            if(current_step > 10) {
 
-          // Reset simulator if error is too large
-          if((fabs(last_error) > max_error) || reset_simulator) {
-
-            if(twiddle_mode && (current_step > 10)) {
-              // This iteration has an average error of:
-              double avg_err = fabs(pid.TotalError() / static_cast<double>(current_step));
-              if(best_error < 0)
-                best_error = avg_err;
-
-              bool new_record = false;
-              bool new_param = false;
-
-              std::cout << "Stats of Run: abs avg error: [" << avg_err << "] best_error: ["<< best_error << "] steps: [" << current_step <<"]"  << std::endl;
-              std::cout << "Params: ";
-
-              for(const auto& p : param)
-                std::cout << p << " ";
-              std::cout << std::endl;
-
-              std::cout << "Delta: ";
-              for(const auto& p : delta_param)
-                std::cout << p << " ";
-
-              if(twiddle_direction[twiddle_index] == 0) {
-                // Twiddle has tried to tune the parameter in the negative direction
-                if(avg_err < best_error) {
-                  best_error = avg_err;
-                  // Since we found a new optimum, we reset the delta to default
-                  delta_param[twiddle_index] = delta_param_default[twiddle_index];
-                  last_param[twiddle_index] = param[twiddle_index];
-                  new_record = true;
-                  new_param = true;
-                } else {
-                  // Update Params for twiddle
-                  param[twiddle_index] = last_param[twiddle_index];
-                  param[twiddle_index] += delta_param[twiddle_index];
-                  if(delta_param[twiddle_index] < 1e-3) {
-                    delta_param[twiddle_index] = delta_param_default[twiddle_index];
-                    new_param = true;
-                  }
-                  twiddle_direction[twiddle_index] = 1;
-                }
-              }
-              else {
-                // Twiddle has tried to tune the parameter in the positive direction
-                if(avg_err < best_error) {
-                  best_error = avg_err;
-                  // Since we found a new optimum, we reset the delta to 0.1
-                  delta_param[twiddle_index] = 1.0;
-                  last_param[twiddle_index] = param[twiddle_index];
-                  new_record = true;
-                  new_param = true;
-                } else {
-                  // Update Params for twiddle
-                  param[twiddle_index] = last_param[twiddle_index];
-                  param[twiddle_index] -= delta_param[twiddle_index];
-                  if(delta_param[twiddle_index] < 1e-3) {
-                    delta_param[twiddle_index] = 1.0;
-                    new_param = true;
-                  }
-                  twiddle_direction[twiddle_index] = 0;
-                }
-              }
-
-              if(!new_record) {
-                delta_param[twiddle_index] *= 0.5;
-              }
-
-              if(new_param) {
-                twiddle_direction[twiddle_index] -= -1;
-                twiddle_direction[twiddle_index] = abs(twiddle_direction[twiddle_index]);
-                twiddle_index += 1;
-                twiddle_index = twiddle_index % static_cast<int>(param.size());
-              }
+              // Optimize the parameter. This function will adjust the PID-Controller
+              optimizer.OptimizeOnRun(pid, current_step);
             }
 
             // Reset Steps
             current_step = 0;
-
-            // Reset PID-controller
-            pid.Init(param[0], param[1], param[2]);
 
             // Send Reset command to simulator!
             // Found by looking in :

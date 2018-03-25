@@ -116,6 +116,24 @@ void Optimizer::OptimizeParameter(const double& current_error) {
   return;
 }
 
+void Optimizer::Print() {
+
+  std::string direction = current_parameter_tune_direction == 1 ? "+1" : "-1";
+
+  std::cout << "Optimizer working on parameter [" << current_parameter_id << "] in direction ["<< direction << "]" << std::endl;
+  std::cout << "Last error was " << last_error << std::endl;
+  std::cout << "Current parameter set: ";
+  for(const auto& p : params) {
+    std::cout << "[" << p << "] ";
+  }
+  std::cout << std::endl;
+  std::cout << "Current delta set: ";
+  for(const auto& p : params_deltas) {
+    std::cout << "[" << p << "] ";
+  }
+  std::cout << std::endl;
+}
+
 void Optimizer::OptimizeOnRun(PID& pid_controller, long driven_steps) {
 
   // Compute current average CTE
@@ -126,6 +144,9 @@ void Optimizer::OptimizeOnRun(PID& pid_controller, long driven_steps) {
 
   // Dont forget to update the last error
   UpdateLastError(current_error);
+
+  // Print Debug
+  Print();
 
   // Reset PID controller
   pid_controller.Init(params);

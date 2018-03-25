@@ -41,6 +41,7 @@ class Optimizer {
 
   void UpdateLastError(const double& current_error);
 
+  void Print();
 
  public:
   Optimizer(const std::vector<double> &params, const std::vector<double> &params_deltas);
