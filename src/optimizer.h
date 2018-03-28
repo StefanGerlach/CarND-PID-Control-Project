@@ -22,6 +22,13 @@ class Optimizer {
   double decrease_factor;
   double decrease_min;
 
+  // Gridsearch paramters
+  std::vector<std::vector<double> > grid_search_combinations;
+  
+  int gridsearch_id; 
+  int gridsearch_max_id;
+  bool gridsearch;
+
   // Current parameter index to adjust
   int current_parameter_id;
   int current_parameter_tune_direction;
@@ -34,6 +41,8 @@ class Optimizer {
    * */
   void OptimizeParameter(const double& current_error);
 
+  void OptimizeGridSearch(const double &current_score);
+
   /*
    * Switches to the next parameter that should be optimized.
    * */
@@ -44,7 +53,11 @@ class Optimizer {
   void Print();
 
  public:
+
   Optimizer(const std::vector<double> &params, const std::vector<double> &params_deltas);
+
+
+  void InitializeGridSearch(const std::vector<double> &min_params, const std::vector<double> &max_params, const std::vector<double> &step_params);
 
   /*
    * Returns the current parameter set.

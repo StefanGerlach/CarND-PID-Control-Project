@@ -37,28 +37,32 @@ int main()
 {
   uWS::Hub h;
 
+  double constant_speed = 0.5;
+
   PID pid;
 
   // Initialize the pid variable.
-  std::vector<double> param({0.2, 0.0, 2.0});
-  std::vector<double> delta_param({3.0, 0.5, 3.0});
+  std::vector<double> param({0.5, 0.001, 5.0});
+  std::vector<double> delta_param({0.1, 0.01, 0.1});
 
   pid.Init(param);
 
   // Initialize the optimizer
   Optimizer optimizer(param, delta_param);
+  optimizer.InitializeGridSearch({0.0, 0.0, 0.0}, {1.0, 0.1, 7.0}, {0.15, 0.02, 0.75});
 
   // Initialize the max error
   // If this error is exceeded, the simulator is restarted
-  double max_error = 3.0;
+  double max_error = 2.0;
 
   // Define the number of frames to use for twiddling
   bool twiddle_mode = true;
-  unsigned long twiddle_steps = 65536;
+  unsigned long twiddle_steps = 7000;
   unsigned long current_step = 0;
 
   h.onMessage([&pid, // pass everything needed by reference into lambda function
                &optimizer,
+               &constant_speed,
                &max_error,
                &twiddle_mode,
                &twiddle_steps,
@@ -131,7 +135,7 @@ int main()
           else {
 
             msgJson["steering_angle"] = steer_value;
-            msgJson["throttle"] = 0.3;
+            msgJson["throttle"] = constant_speed;
             auto msg = "42[\"steer\"," + msgJson.dump() + "]";
             //std::cout << msg << std::endl;
             ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
