@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <numeric>
+#include <math.h>
 
 using namespace std;
 
@@ -82,7 +83,7 @@ double PID::GetUpdatedSteering(const double& cte) {
 double PID::TotalError() {
   double accumulated_abs_error = 0.0;
   for(const auto& e : last_errors)
-    accumulated_abs_error += fabs(e);
+    accumulated_abs_error += abs(e);
 
   return accumulated_abs_error;
 }

@@ -48,7 +48,7 @@ int main()
   pid.Init(param);
 
   // Initialize the optimizer
-  Optimizer optimizer(param, delta_param, 8192);
+  Optimizer optimizer(param, delta_param);
   optimizer.InitializeGridSearch({0.0, 0.0, 0.0}, {1.0, 0.1, 7.0}, {0.125, 0.02, 0.75});
 
   // If this error is exceeded, the simulator is restarted
