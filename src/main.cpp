@@ -37,26 +37,27 @@ int main()
 {
   uWS::Hub h;
 
-  double constant_speed = 0.5;
+  double constant_speed = 0.3;
 
   PID pid;
 
   // Initialize the pid variable.
-  std::vector<double> param({0.5, 0.001, 5.0});
+  std::vector<double> param({0.3, 0.00001, 7.0});
   std::vector<double> delta_param({0.1, 0.01, 0.1});
 
   pid.Init(param);
 
   // Initialize the optimizer
-  Optimizer optimizer(param, delta_param);
-  optimizer.InitializeGridSearch({0.0, 0.0, 0.0}, {1.0, 0.1, 7.0}, {0.15, 0.02, 0.75});
+  Optimizer optimizer(param, delta_param, 8192);
+  optimizer.InitializeGridSearch({0.0, 0.0, 0.0}, {1.0, 0.1, 7.0}, {0.125, 0.02, 0.75});
 
-  // Initialize the max error
   // If this error is exceeded, the simulator is restarted
   double max_error = 2.0;
 
+  // If this flag is true, the Optimizer will perform a gridsearch plus finetuning afterwards
+  bool twiddle_mode = false;
+
   // Define the number of frames to use for twiddling
-  bool twiddle_mode = true;
   unsigned long twiddle_steps = 7000;
   unsigned long current_step = 0;
 
